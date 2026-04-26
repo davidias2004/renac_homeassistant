@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RENAC Power",
+        "description": "Enter your RENAC account credentials. Station ID and User ID will be discovered automatically.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "station": {
+        "title": "RENAC Power — Select Station",
+        "description": "Stations found in your account. Select the one you want to add.",
+        "data": {
+          "station_id": "Station",
+          "user_id": "User ID (not found automatically)",
+          "equ_sn": "Inverter serial number (optional)"
+        }
+      },
+      "manual": {
+        "title": "RENAC Power — Manual Setup",
+        "description": "Could not discover stations automatically. Enter the IDs manually (check the requests in the RENAC app/web).",
+        "data": {
+          "user_id": "User ID",
+          "station_id": "Station ID",
+          "equ_sn": "Inverter serial number (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not authenticate or connect to the RENAC API.",
+      "unknown": "Unknown error."
+    },
+    "abort": {
+      "already_configured": "This RENAC station is already configured."
+    }
+  }
+}
