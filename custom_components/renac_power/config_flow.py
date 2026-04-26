@@ -40,6 +40,20 @@ def _deep_find_key(data: Any, keys: tuple[str, ...]) -> Any:
     return None
 
 
+def _extract_user_id(login_data: dict) -> str | None:
+    """Extract user_id from login response.
+
+    The RENAC API returns the user_id directly as 'data' in the root
+    e.g. {"code": 1, "data": 149502, "user": {"token": "..."}}
+    """
+    raw = login_data.get("data")
+    if isinstance(raw, int) and raw > 0:
+        return str(raw)
+    if isinstance(raw, str) and raw.isdigit() and int(raw) > 0:
+        return raw
+    return str(uid) if (uid := _deep_find_key(login_data, _USER_ID_KEYS)) else None
+
+
 def _extract_station_list(data: Any) -> list[dict[str, Any]]:
     items: list[Any] = []
     if isinstance(data, list):
@@ -92,7 +106,7 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 errors["base"] = "unknown"
             else:
-                self._discovered_user_id = str(uid) if (uid := _deep_find_key(login_data, _USER_ID_KEYS)) else None
+                self._discovered_user_id = _extract_user_id(login_data)
 
                 stations: list[dict[str, Any]] = []
                 for endpoint in _STATION_LIST_ENDPOINTS:

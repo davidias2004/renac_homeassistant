@@ -31,7 +31,7 @@ class RenacApiClient:
             json={"login_name": self.username, "pwd": self.password},
             auth_required=False,
         )
-        token = self._deep_find(data, ["token", "access_token", "data.token", "data.access_token"])
+        token = self._deep_find(data, ["user.token", "token", "access_token", "data.token", "data.access_token"])
         if not token:
             raise RenacApiError(f"Login efetuado, mas token não encontrado na resposta: {data}")
         self.token = str(token)

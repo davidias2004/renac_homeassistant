@@ -64,17 +64,24 @@ class RenacClient:
             json={"login_name": self.username, "pwd": self.password},
             auth_required=False,
         )
-        token = _deep_find(data, ["token", "access_token", "data.token", "data.access_token"])
+        token = _deep_find(data, ["user.token", "token", "access_token", "data.token", "data.access_token"])
         if not token:
             raise RenacApiError(f"Login OK but token not found in response: {data}")
         self.token = str(token)
         self._login_data = data if isinstance(data, dict) else {}
 
         # Auto-discover user_id from login response if not configured
-        if not self.user_id:
-            uid = _deep_find(data, [f"data.{k}" for k in _USER_ID_KEYS] + list(_USER_ID_KEYS))
-            if uid:
-                self.user_id = str(uid)
+        # Pattern: {"code": 1, "data": 149502, "user": {"token": "..."}} — data IS the user_id
+        if not self.user_id and isinstance(data, dict):
+            raw = data.get("data")
+            if isinstance(raw, int) and raw > 0:
+                self.user_id = str(raw)
+            elif isinstance(raw, str) and raw.isdigit() and int(raw) > 0:
+                self.user_id = raw
+            else:
+                uid = _deep_find(data, [f"data.{k}" for k in _USER_ID_KEYS] + list(_USER_ID_KEYS))
+                if uid:
+                    self.user_id = str(uid)
 
         return self.token
 
