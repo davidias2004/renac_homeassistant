@@ -1,12 +1,11 @@
 {
   "domain": "renac_power",
   "name": "RENAC Power",
-  "codeowners": [],
+  "version": "0.1.0",
   "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/your-user/ha-renac-power",
+  "codeowners": [
+    "@davidias2004"
+  ],
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/your-user/ha-renac-power/issues",
-  "requirements": ["aiohttp>=3.9.0"],
-  "version": "0.1.0"
+  "requirements": []
 }
