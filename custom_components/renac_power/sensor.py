@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import RenacEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def find_value(data: Any, names: tuple[str, ...]) -> Any:
@@ -123,6 +126,15 @@ class RenacSensor(RenacEntity, SensorEntity):
     def native_value(self):
         data = self.coordinator.data.get(self.entity_description.source, {})
         value = find_value(data, self.entity_description.fields)
+        if value is None:
+            _LOGGER.debug(
+                "%s: no value found in '%s' for fields %s. Top-level keys: %s",
+                self.entity_description.key,
+                self.entity_description.source,
+                self.entity_description.fields,
+                list(data.keys()) if isinstance(data, dict) else type(data).__name__,
+            )
+            return None
         if isinstance(value, list):
             return len(value)
         try:
@@ -135,4 +147,9 @@ class RenacSensor(RenacEntity, SensorEntity):
         data = self.coordinator.data.get(self.entity_description.source, {})
         if isinstance(data, dict) and "error" in data:
             return {"error": data["error"]}
+        if isinstance(data, dict):
+            return {
+                "source": self.entity_description.source,
+                "available_keys": list(data.keys()),
+            }
         return {"source": self.entity_description.source}
