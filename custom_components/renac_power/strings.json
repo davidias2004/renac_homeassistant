@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RENAC Power",
+        "description": "Configura a tua conta RENAC. O station_id e user_id podem ser obtidos nos pedidos da app/web.",
+        "data": {
+          "base_url": "Base URL",
+          "username": "Utilizador",
+          "password": "Password",
+          "user_id": "User ID",
+          "station_id": "Station ID",
+          "equ_sn": "Número de série do inversor, opcional"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Não foi possível autenticar ou ligar à API RENAC.",
+      "unknown": "Erro desconhecido."
+    },
+    "abort": {
+      "already_configured": "Esta estação RENAC já está configurada."
+    }
+  }
+}
