@@ -1,7 +1,7 @@
 {
   "domain": "renac_power",
   "name": "RENAC Power",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "config_flow": true,
   "codeowners": [
     "@davidias2004"
