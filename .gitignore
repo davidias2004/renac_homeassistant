@@ -3,6 +3,10 @@ mcp/.env
 .env
 *.env
 
+# API capture files (may contain tokens/credentials)
+request_response.txt
+**/request_response.txt
+
 # Python
 __pycache__/
 *.py[cod]
