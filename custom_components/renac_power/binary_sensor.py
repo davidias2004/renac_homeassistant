@@ -29,9 +29,8 @@ class RenacProblemSensor(RenacEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         errors = self.coordinator.data.get("errors", {})
-        total = find_value(errors, ("total", "count", "recordsTotal"))
+        total = find_value(errors, ("total",))
         try:
             return int(total) > 0
         except (TypeError, ValueError):
-            rows = find_value(errors, ("rows", "list", "data"))
-            return isinstance(rows, list) and len(rows) > 0
+            return False

@@ -11,6 +11,19 @@ class RenacApiError(Exception):
     """RENAC API error."""
 
 
+def _inject_storage_sublists(results: dict[str, Any]) -> None:
+    """Split storage_overview into storage_today and storage_total scalar dicts."""
+    raw = results.get("storage_overview", {})
+    if not isinstance(raw, dict):
+        return
+    data = raw.get("data", raw)
+    if not isinstance(data, dict):
+        return
+    for dest, key in (("storage_today", "today"), ("storage_total", "total")):
+        items = data.get(key, [])
+        results[dest] = items[0] if isinstance(items, list) and items else {}
+
+
 @dataclass
 class RenacApiClient:
     session: aiohttp.ClientSession
@@ -46,14 +59,23 @@ class RenacApiClient:
             await self.async_login()
 
         today = date.today().isoformat()
-        month = today[:7]
-        year = today[:4]
 
         payloads = {
-            "power_flow": self._form("/api/home/station/powerFlow", {"station_id": self.station_id}),
-            "storage_overview": self._json("/api/station/storage/overview", {"station_id": self.station_id}),
-            "savings": self._json("/api/station/all/savings", {"station_id": self.station_id}),
-            "equip_stat": self._json("/api/station/equipStat", {"station_id": self.station_id, "user_id": self.user_id}),
+            "station_overview": self._json("/api/dashboard/pageStation", {
+                "email": self.user_id, "offset": 0, "rows": 5,
+            }),
+            "statistics": self._json("/api/dashboard/large/v2/statistics", {
+                "email": self.user_id,
+            }),
+            "storage_overview": self._json("/api/station/storage/overview", {
+                "station_id": self.station_id,
+            }),
+            "savings": self._json("/api/station/all/savings", {
+                "station_id": self.station_id,
+            }),
+            "equip_stat": self._json("/api/station/equipStat", {
+                "station_id": self.station_id, "user_id": self.user_id,
+            }),
             "errors": self._json("/api/home/errorList2", {
                 "user_id": self.user_id,
                 "begin_time": today,
@@ -63,9 +85,6 @@ class RenacApiClient:
                 "station_id": self.station_id,
                 "status": "0",
             }),
-            "chart_day": self._json("/api/station/chart/station", {"time_type": 1, "station_id": self.station_id, "time": today}),
-            "chart_month": self._json("/api/station/chart/station", {"time_type": 3, "station_id": self.station_id, "time": month}),
-            "chart_year": self._json("/api/station/chart/station", {"time_type": 4, "station_id": self.station_id, "time": year}),
             "equipment_list": self._json("/bg/equList", {
                 "user_id": self.user_id,
                 "station_id": self.station_id,
@@ -77,12 +96,6 @@ class RenacApiClient:
         }
 
         if self.equ_sn:
-            payloads["inverter_detail"] = self._json("/bg/inv/detail", {
-                "equ_sn": self.equ_sn,
-                "offset": 0,
-                "rows": 10,
-                "time": today,
-            })
             payloads["grid_chart"] = self._json("/api/inv/gridChart2", {
                 "equipSn": self.equ_sn,
                 "timeType": 1,
@@ -100,17 +113,13 @@ class RenacApiClient:
                     results[key] = await self._request("POST", **request_args)
                 else:
                     results[key] = {"error": str(err)}
+
+        # Split storage_overview into per-day and all-time sub-dicts
+        _inject_storage_sublists(results)
         return results
 
     def _json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {"path": path, "json": payload}
-
-    def _form(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "path": path,
-            "data": payload,
-            "headers": {"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
-        }
 
     async def _request(
         self,

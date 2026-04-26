@@ -186,9 +186,18 @@ class RenacClient:
     # Domain methods
     # ------------------------------------------------------------------
 
-    async def get_power_flow(self) -> dict[str, Any]:
+    async def get_station_overview(self) -> dict[str, Any]:
+        """Current power + today/total energy from the dashboard API."""
         return await self._authed_post(
-            "/api/home/station/powerFlow", {"station_id": self.station_id}, form=True
+            "/api/dashboard/pageStation",
+            {"email": self.user_id, "offset": 0, "rows": 5},
+        )
+
+    async def get_statistics(self) -> dict[str, Any]:
+        """Month/year/lifetime energy totals and financial summary."""
+        return await self._authed_post(
+            "/api/dashboard/large/v2/statistics",
+            {"email": self.user_id},
         )
 
     async def get_storage_overview(self) -> dict[str, Any]:
@@ -273,20 +282,17 @@ class RenacClient:
         )
 
     async def fetch_all(self) -> dict[str, Any]:
-        """Fetch all available data in parallel."""
+        """Fetch all available data."""
         tasks: dict[str, Any] = {
-            "power_flow": self.get_power_flow(),
+            "station_overview": self.get_station_overview(),
+            "statistics": self.get_statistics(),
             "storage_overview": self.get_storage_overview(),
             "savings": self.get_savings(),
             "equipment_status": self.get_equipment_status(),
             "errors": self.get_errors(),
-            "chart_day": self.get_chart_day(),
-            "chart_month": self.get_chart_month(),
-            "chart_year": self.get_chart_year(),
             "equipment_list": self.get_equipment_list(),
         }
         if self.equ_sn:
-            tasks["inverter_detail"] = self.get_inverter_detail()
             tasks["grid_chart"] = self.get_grid_chart()
 
         results: dict[str, Any] = {}
@@ -399,26 +405,41 @@ async def _run(coro: Any) -> Any:
 async def fetch_all_data() -> dict[str, Any]:
     """Fetch all available data from the RENAC station in one call.
 
-    Returns power flow, battery status, savings, equipment status, errors,
-    daily/monthly/yearly energy charts, equipment list, and (if configured)
-    inverter detail and grid chart.
+    Returns station_overview (current power + today/total energy),
+    statistics (month/year totals), storage_overview (battery/load breakdown),
+    savings (financial + environmental), equipment status, errors, equipment list,
+    and (if RENAC_EQU_SN is configured) the grid chart.
     """
     return await _run(lambda c: c.fetch_all())
 
 
 @mcp.tool()
-async def get_power_flow() -> dict[str, Any]:
-    """Get the current real-time power flow of the RENAC station.
+async def get_station_overview() -> dict[str, Any]:
+    """Get real-time station overview: current PV power (W), today's energy (kWh), total lifetime energy (kWh).
 
-    Includes current PV production, battery charge/discharge, grid import/export,
-    and home consumption.
+    Returns results list where results[0] has: currentPower (W), dayPower (kWh), totalPower (kWh).
     """
-    return await _run(lambda c: c.get_power_flow())
+    return await _run(lambda c: c.get_station_overview())
+
+
+@mcp.tool()
+async def get_statistics() -> dict[str, Any]:
+    """Get energy statistics: month/year/lifetime totals and financial summary.
+
+    Returns results dict with: month_power_total, year_power_total, total_power_gt (kWh),
+    total_price, total_month_price, total_year_price, total_day_price (currency),
+    co2, so2, fuel, tree (environmental).
+    """
+    return await _run(lambda c: c.get_statistics())
 
 
 @mcp.tool()
 async def get_battery_status() -> dict[str, Any]:
-    """Get battery / storage overview including State of Charge (SOC)."""
+    """Get battery / storage overview including today and total energy split by source.
+
+    Returns data.today and data.total arrays with DAY_PV_ENERGY, DAY_BAT_CHARGE,
+    DAY_BAT_DISCHARGE, DAY_ENERGY_LOAD, METER_FEEDIN_DAY, METER_CONSUM_DAY.
+    """
     return await _run(lambda c: c.get_storage_overview())
 
 
