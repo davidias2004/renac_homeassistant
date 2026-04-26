@@ -1,6 +1,7 @@
 # RENAC Power — Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Experimental Home Assistant integration for RENAC solar inverters, using the cloud API observed at `sec.eu.renacpower.com` / `sec.bg.renacpower.cn:8084`.
 
@@ -84,3 +85,12 @@ logger:
 ## Contributing
 
 Found a field name that works for your installation? Open an issue or PR with the raw JSON response (credentials redacted) so the field list can be expanded for everyone.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Developed by **David Dias** ([@davidias2004](https://github.com/davidias2004)).
+This project is not affiliated with or endorsed by RENAC Power Co., Ltd.
