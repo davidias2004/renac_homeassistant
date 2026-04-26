@@ -2,15 +2,29 @@
   "config": {
     "step": {
       "user": {
-        "title": "RENAC Power",
-        "description": "Configura a tua conta RENAC. O station_id e user_id podem ser obtidos nos pedidos da app/web.",
+        "title": "RENAC Power — Credenciais",
+        "description": "Introduz o utilizador e password da conta RENAC. O Station ID e User ID serão descobertos automaticamente.",
         "data": {
-          "base_url": "Base URL",
           "username": "Utilizador",
-          "password": "Password",
+          "password": "Password"
+        }
+      },
+      "station": {
+        "title": "RENAC Power — Selecionar Estação",
+        "description": "Estações encontradas na tua conta. Seleciona a que pretendes adicionar.",
+        "data": {
+          "station_id": "Estação",
+          "user_id": "User ID (não encontrado automaticamente)",
+          "equ_sn": "Número de série do inversor (opcional)"
+        }
+      },
+      "manual": {
+        "title": "RENAC Power — Configuração Manual",
+        "description": "Não foi possível descobrir as estações automaticamente. Introduz os IDs manualmente (consulta os pedidos da app/web).",
+        "data": {
           "user_id": "User ID",
           "station_id": "Station ID",
-          "equ_sn": "Número de série do inversor, opcional"
+          "equ_sn": "Número de série do inversor (opcional)"
         }
       }
     },

@@ -32,7 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data[CONF_PASSWORD],
         station_id=str(entry.data[CONF_STATION_ID]),
         user_id=str(entry.data[CONF_USER_ID]),
-        equ_sn=entry.data.get(CONF_EQU_SN),
+        equ_sn=entry.data.get(CONF_EQU_SN) or None,
     )
 
     async def async_update_data() -> dict:

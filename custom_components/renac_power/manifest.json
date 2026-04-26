@@ -7,5 +7,6 @@
     "@davidias2004"
   ],
   "iot_class": "cloud_polling",
-  "requirements": []
+  "requirements": [],
+  "homeassistant": "2024.1.0"
 }

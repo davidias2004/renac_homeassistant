@@ -23,20 +23,23 @@ class RenacApiClient:
 
     token: str | None = None
 
-    async def async_login(self) -> str:
+    async def _raw_login(self) -> dict:
+        """Login and return the full response payload (useful for discovery)."""
         data = await self._request(
             "POST",
             "/api/user/login",
             json={"login_name": self.username, "pwd": self.password},
             auth_required=False,
         )
-
         token = self._deep_find(data, ["token", "access_token", "data.token", "data.access_token"])
         if not token:
             raise RenacApiError(f"Login efetuado, mas token não encontrado na resposta: {data}")
-
         self.token = str(token)
-        return self.token
+        return data if isinstance(data, dict) else {}
+
+    async def async_login(self) -> str:
+        data = await self._raw_login()
+        return self.token  # type: ignore[return-value]
 
     async def async_fetch_all(self) -> dict[str, Any]:
         if not self.token:
@@ -132,7 +135,7 @@ class RenacApiClient:
                 await self.async_login()
             req_headers["token"] = self.token or ""
 
-        async with self.session.request(method, url, json=json, data=data, headers=req_headers, timeout=30) as resp:
+        async with self.session.request(method, url, json=json, data=data, headers=req_headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             text = await resp.text()
             if resp.status >= 400:
                 raise RenacApiError(f"HTTP {resp.status} em {path}: {text[:300]}")
