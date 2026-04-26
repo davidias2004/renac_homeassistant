@@ -54,16 +54,23 @@ class RenacApiClient:
         data = await self._raw_login()
         return self.token  # type: ignore[return-value]
 
-    async def async_fetch_all(self) -> dict[str, Any]:
+    async def async_fetch_fast(self) -> dict[str, Any]:
+        """Fetch station overview (current power) — called on the fast interval."""
         if not self.token:
             await self.async_login()
-
-        today = date.today().isoformat()
-
         payloads = {
             "station_overview": self._json("/api/dashboard/pageStation", {
                 "email": self.user_id, "offset": 0, "rows": 5,
             }),
+        }
+        return await self._fetch_payloads(payloads)
+
+    async def async_fetch_slow(self) -> dict[str, Any]:
+        """Fetch statistics, savings, equipment info — called on the slow interval."""
+        if not self.token:
+            await self.async_login()
+        today = date.today().isoformat()
+        payloads = {
             "statistics": self._json("/api/dashboard/large/v2/statistics", {
                 "email": self.user_id,
             }),
@@ -94,7 +101,6 @@ class RenacApiClient:
                 "equ_sn": "",
             }),
         }
-
         if self.equ_sn:
             payloads["grid_chart"] = self._json("/api/inv/gridChart2", {
                 "equipSn": self.equ_sn,
@@ -102,7 +108,11 @@ class RenacApiClient:
                 "time": today,
                 "temId": 6,
             })
+        results = await self._fetch_payloads(payloads)
+        _inject_storage_sublists(results)
+        return results
 
+    async def _fetch_payloads(self, payloads: dict[str, Any]) -> dict[str, Any]:
         results: dict[str, Any] = {}
         for key, request_args in payloads.items():
             try:
@@ -113,9 +123,6 @@ class RenacApiClient:
                     results[key] = await self._request("POST", **request_args)
                 else:
                     results[key] = {"error": str(err)}
-
-        # Split storage_overview into per-day and all-time sub-dicts
-        _inject_storage_sublists(results)
         return results
 
     def _json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:

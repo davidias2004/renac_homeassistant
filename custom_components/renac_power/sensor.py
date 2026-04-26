@@ -255,9 +255,21 @@ SENSORS: tuple[RenacSensorDescription, ...] = (
 )
 
 
+_FAST_SOURCES: frozenset[str] = frozenset(["station_overview"])
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities(RenacSensor(coordinator, entry, description) for description in SENSORS)
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator_fast = entry_data["coordinator_fast"]
+    coordinator_slow = entry_data["coordinator_slow"]
+
+    def _coordinator_for(description: RenacSensorDescription):
+        return coordinator_fast if description.source in _FAST_SOURCES else coordinator_slow
+
+    async_add_entities(
+        RenacSensor(_coordinator_for(description), entry, description)
+        for description in SENSORS
+    )
 
 
 class RenacSensor(RenacEntity, SensorEntity):

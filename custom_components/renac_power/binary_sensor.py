@@ -11,8 +11,8 @@ from .sensor import find_value
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([RenacProblemSensor(coordinator, entry)])
+    coordinator_slow = hass.data[DOMAIN][entry.entry_id]["coordinator_slow"]
+    async_add_entities([RenacProblemSensor(coordinator_slow, entry)])
 
 
 class RenacProblemSensor(RenacEntity, BinarySensorEntity):

@@ -16,7 +16,8 @@ from .const import (
     CONF_EQU_SN,
     CONF_STATION_ID,
     CONF_USER_ID,
-    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL_FAST,
+    DEFAULT_SCAN_INTERVAL_SLOW,
     DOMAIN,
 )
 
@@ -42,6 +43,25 @@ def _find_inverter_sn(data: Any) -> str | None:
     return None
 
 
+def _make_update_fn(client: RenacApiClient, fetch_method: str, first_fetch_ref: list[bool]):
+    async def async_update_data() -> dict:
+        try:
+            data = await getattr(client, fetch_method)()
+        except RenacApiError as err:
+            raise UpdateFailed(str(err)) from err
+        if first_fetch_ref[0]:
+            first_fetch_ref[0] = False
+            for endpoint, payload in data.items():
+                if isinstance(payload, dict) and "error" not in payload:
+                    _LOGGER.debug("Endpoint '%s' top-level keys: %s", endpoint, list(payload.keys()))
+                elif isinstance(payload, dict):
+                    _LOGGER.warning("Endpoint '%s' returned error: %s", endpoint, payload.get("error"))
+                else:
+                    _LOGGER.debug("Endpoint '%s' returned type: %s", endpoint, type(payload).__name__)
+        return data
+    return async_update_data
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     client = RenacApiClient(
@@ -54,47 +74,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         equ_sn=entry.data.get(CONF_EQU_SN) or None,
     )
 
-    _first_fetch = True
-
-    async def async_update_data() -> dict:
-        nonlocal _first_fetch
-        try:
-            data = await client.async_fetch_all()
-        except RenacApiError as err:
-            raise UpdateFailed(str(err)) from err
-        if _first_fetch:
-            _first_fetch = False
-            for endpoint, payload in data.items():
-                if isinstance(payload, dict) and "error" not in payload:
-                    _LOGGER.debug("Endpoint '%s' top-level keys: %s", endpoint, list(payload.keys()))
-                elif isinstance(payload, dict):
-                    _LOGGER.warning("Endpoint '%s' returned error: %s", endpoint, payload.get("error"))
-                else:
-                    _LOGGER.debug("Endpoint '%s' returned type: %s", endpoint, type(payload).__name__)
-        return data
-
-    coordinator = DataUpdateCoordinator(
+    coordinator_fast = DataUpdateCoordinator(
         hass,
         _LOGGER,
-        name=DOMAIN,
-        update_method=async_update_data,
-        update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+        name=f"{DOMAIN}_fast",
+        update_method=_make_update_fn(client, "async_fetch_fast", [True]),
+        update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL_FAST),
     )
 
-    # Use async_refresh instead of async_config_entry_first_refresh so the entry loads
-    # even if the first API call fails (entities will be unavailable until data arrives).
-    await coordinator.async_refresh()
+    coordinator_slow = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name=f"{DOMAIN}_slow",
+        update_method=_make_update_fn(client, "async_fetch_slow", [True]),
+        update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL_SLOW),
+    )
+
+    await coordinator_fast.async_refresh()
+    await coordinator_slow.async_refresh()
 
     # Auto-discover inverter SN from equipment list if not configured
-    if not client.equ_sn and coordinator.data:
-        sn = _find_inverter_sn(coordinator.data.get("equipment_list", {}))
+    if not client.equ_sn and coordinator_slow.data:
+        sn = _find_inverter_sn(coordinator_slow.data.get("equipment_list", {}))
         if sn:
             client.equ_sn = sn
             _LOGGER.info("Auto-discovered inverter SN: %s — set RENAC_EQU_SN to enable extra sensors", sn)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "client": client,
-        "coordinator": coordinator,
+        "coordinator_fast": coordinator_fast,
+        "coordinator_slow": coordinator_slow,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

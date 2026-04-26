@@ -35,8 +35,11 @@ def _field_map(data: Any, depth: int = 0) -> Any:
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    raw: dict[str, Any] = coordinator.data or {}
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    raw: dict[str, Any] = {
+        **(entry_data["coordinator_fast"].data or {}),
+        **(entry_data["coordinator_slow"].data or {}),
+    }
 
     sensor_status: dict[str, Any] = {}
     for key, source_data in raw.items():
