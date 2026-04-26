@@ -81,7 +81,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
     )
 
-    await coordinator.async_config_entry_first_refresh()
+    # Use async_refresh instead of async_config_entry_first_refresh so the entry loads
+    # even if the first API call fails (entities will be unavailable until data arrives).
+    await coordinator.async_refresh()
 
     # Auto-discover inverter SN from equipment list if not configured
     if not client.equ_sn and coordinator.data:

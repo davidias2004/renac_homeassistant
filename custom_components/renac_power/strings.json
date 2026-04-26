@@ -11,20 +11,18 @@
       },
       "station": {
         "title": "RENAC Power — Selecionar Estação",
-        "description": "Estações encontradas na tua conta. Seleciona a que pretendes adicionar.",
+        "description": "Estações encontradas na tua conta. Seleciona a que pretendes adicionar. O número de série do inversor será descoberto automaticamente.",
         "data": {
           "station_id": "Estação",
-          "user_id": "User ID (não encontrado automaticamente)",
-          "equ_sn": "Número de série do inversor (opcional)"
+          "user_id": "User ID (não encontrado automaticamente)"
         }
       },
       "manual": {
         "title": "RENAC Power — Configuração Manual",
-        "description": "Não foi possível descobrir as estações automaticamente. Introduz os IDs manualmente (consulta os pedidos da app/web).",
+        "description": "Não foi possível descobrir as estações automaticamente. Introduz os IDs manualmente. O número de série do inversor será descoberto automaticamente.",
         "data": {
           "user_id": "User ID",
-          "station_id": "Station ID",
-          "equ_sn": "Número de série do inversor (opcional)"
+          "station_id": "Station ID"
         }
       }
     },

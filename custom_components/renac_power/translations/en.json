@@ -11,20 +11,18 @@
       },
       "station": {
         "title": "RENAC Power — Select Station",
-        "description": "Stations found in your account. Select the one you want to add.",
+        "description": "Stations found in your account. Select the one you want to add. The inverter serial number will be discovered automatically.",
         "data": {
           "station_id": "Station",
-          "user_id": "User ID (not found automatically)",
-          "equ_sn": "Inverter serial number (optional)"
+          "user_id": "User ID (not found automatically)"
         }
       },
       "manual": {
         "title": "RENAC Power — Manual Setup",
-        "description": "Could not discover stations automatically. Enter the IDs manually (check the requests in the RENAC app/web).",
+        "description": "Could not discover stations automatically. Enter the IDs manually (check the RENAC app/web). The inverter serial number will be discovered automatically.",
         "data": {
           "user_id": "User ID",
-          "station_id": "Station ID",
-          "equ_sn": "Inverter serial number (optional)"
+          "station_id": "Station ID"
         }
       }
     },

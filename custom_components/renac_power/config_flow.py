@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -11,16 +12,20 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import RenacApiClient, RenacApiError
 from .const import CONF_BASE_URL, CONF_EQU_SN, CONF_STATION_ID, CONF_USER_ID, DEFAULT_BASE_URL, DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
+# Confirmed working: POST /api/station/list {"user_id":149502,"offset":0,"rows":1}
 _STATION_LIST_ENDPOINTS = [
-    "/api/home/station/list",
     "/api/station/list",
+    "/api/home/station/list",
     "/api/user/station/list",
     "/bg/station/list",
     "/api/home/stationList",
 ]
-_STATION_ID_KEYS = ("stationId", "station_id", "id", "sid", "plantId", "plant_id")
+_STATION_ID_KEYS = ("stationId", "station_id", "sid", "plantId", "plant_id")
 _STATION_NAME_KEYS = ("stationName", "station_name", "name", "plantName", "plant_name")
 _USER_ID_KEYS = ("userId", "user_id", "uid", "memberId", "member_id")
+_EQU_SN_KEYS = ("equ_sn", "equSn", "sn", "serialNumber", "serial_number", "deviceSn", "inverterSn", "equipSn")
 
 
 def _deep_find_key(data: Any, keys: tuple[str, ...]) -> Any:
@@ -43,8 +48,8 @@ def _deep_find_key(data: Any, keys: tuple[str, ...]) -> Any:
 def _extract_user_id(login_data: dict) -> str | None:
     """Extract user_id from login response.
 
-    The RENAC API returns the user_id directly as 'data' in the root
-    e.g. {"code": 1, "data": 149502, "user": {"token": "..."}}
+    RENAC returns the user_id as the root 'data' field:
+    {"code": 1, "data": 149502, "user": {"token": "..."}}
     """
     raw = login_data.get("data")
     if isinstance(raw, int) and raw > 0:
@@ -78,6 +83,44 @@ def _extract_station_list(data: Any) -> list[dict[str, Any]]:
     return result
 
 
+def _find_equ_sn(data: Any) -> str | None:
+    """Extract the first inverter serial number from an equipment list response."""
+    items: list = []
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        for key in ("data", "rows", "list", "records"):
+            if isinstance(data.get(key), list):
+                items = data[key]
+                break
+    for item in items:
+        if isinstance(item, dict):
+            for k in _EQU_SN_KEYS:
+                if item.get(k):
+                    return str(item[k])
+    return None
+
+
+async def _discover_equ_sn(client: RenacApiClient, station_id: str, user_id: str) -> str | None:
+    """Call /bg/equList and return the first inverter SN found."""
+    try:
+        resp = await client._request("POST", "/bg/equList", json={
+            "user_id": user_id,
+            "station_id": station_id,
+            "status": 0,
+            "offset": 0,
+            "rows": 10,
+            "equ_sn": "",
+        })
+        sn = _find_equ_sn(resp)
+        if sn:
+            _LOGGER.info("Auto-discovered inverter SN: %s", sn)
+        return sn
+    except RenacApiError as err:
+        _LOGGER.debug("Could not auto-discover inverter SN: %s", err)
+        return None
+
+
 class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -107,24 +150,34 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 self._discovered_user_id = _extract_user_id(login_data)
+                self._credentials = {**user_input, CONF_BASE_URL: DEFAULT_BASE_URL}
 
+                # Discover stations — confirmed working payload includes offset+rows
                 stations: list[dict[str, Any]] = []
                 for endpoint in _STATION_LIST_ENDPOINTS:
                     try:
-                        resp = await temp_client._request("POST", endpoint, json={"user_id": self._discovered_user_id or ""})
+                        resp = await temp_client._request("POST", endpoint, json={
+                            "user_id": self._discovered_user_id or "",
+                            "offset": 0,
+                            "rows": 10,
+                        })
                         stations = _extract_station_list(resp)
                         if stations:
+                            _LOGGER.debug("Stations found via %s: %s", endpoint, stations)
                             break
                     except RenacApiError:
                         pass
 
-                self._credentials = {**user_input, CONF_BASE_URL: DEFAULT_BASE_URL}
                 self._discovered_stations = stations
 
-                if stations:
-                    return await self.async_step_station()
+                if not stations:
+                    return await self.async_step_manual()
 
-                return await self.async_step_manual()
+                # Single station → skip selection, go straight to confirm
+                if len(stations) == 1:
+                    return await self._confirm_station(temp_client, stations[0])
+
+                return await self.async_step_station()
 
         schema = vol.Schema({
             vol.Required(CONF_USERNAME): str,
@@ -132,30 +185,49 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         })
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    async def _confirm_station(
+        self,
+        client: RenacApiClient,
+        station: dict[str, Any],
+    ):
+        """Create the entry for a single auto-selected station."""
+        user_id = station.get("user_id") or self._discovered_user_id or ""
+        station_id = station["station_id"]
+        equ_sn = await _discover_equ_sn(client, station_id, user_id)
+
+        data = {
+            **self._credentials,
+            CONF_STATION_ID: station_id,
+            CONF_USER_ID: user_id,
+            CONF_EQU_SN: equ_sn,
+        }
+        await self.async_set_unique_id(f"{user_id}_{station_id}")
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=f"RENAC {station.get('name') or station_id}",
+            data=data,
+        )
+
     async def async_step_station(self, user_input: dict[str, Any] | None = None):
-        """Let user pick from discovered stations."""
+        """Let user pick from discovered stations (shown when multiple stations exist)."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            station = next((s for s in self._discovered_stations if s["station_id"] == user_input[CONF_STATION_ID]), None)
+            station = next(
+                (s for s in self._discovered_stations if s["station_id"] == user_input[CONF_STATION_ID]),
+                None,
+            )
             user_id = (station or {}).get("user_id") or self._discovered_user_id or user_input.get(CONF_USER_ID, "")
-            equ_sn = user_input.get(CONF_EQU_SN) or None
+            station_id = user_input[CONF_STATION_ID]
 
-            data = {
-                **self._credentials,
-                CONF_STATION_ID: user_input[CONF_STATION_ID],
-                CONF_USER_ID: user_id,
-                CONF_EQU_SN: equ_sn,
-            }
             session = async_get_clientsession(self.hass)
             client = RenacApiClient(
                 session=session,
-                base_url=data[CONF_BASE_URL],
-                username=data[CONF_USERNAME],
-                password=data[CONF_PASSWORD],
-                station_id=data[CONF_STATION_ID],
-                user_id=data[CONF_USER_ID],
-                equ_sn=equ_sn,
+                base_url=self._credentials[CONF_BASE_URL],
+                username=self._credentials[CONF_USERNAME],
+                password=self._credentials[CONF_PASSWORD],
+                station_id=station_id,
+                user_id=user_id,
             )
             try:
                 await client.async_login()
@@ -164,16 +236,23 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(f"{user_id}_{user_input[CONF_STATION_ID]}")
+                equ_sn = await _discover_equ_sn(client, station_id, user_id)
+                data = {
+                    **self._credentials,
+                    CONF_STATION_ID: station_id,
+                    CONF_USER_ID: user_id,
+                    CONF_EQU_SN: equ_sn,
+                }
+                await self.async_set_unique_id(f"{user_id}_{station_id}")
                 self._abort_if_unique_id_configured()
-                station_name = (station or {}).get("name") or user_input[CONF_STATION_ID]
+                station_name = (station or {}).get("name") or station_id
                 return self.async_create_entry(title=f"RENAC {station_name}", data=data)
 
-        station_options = {s["station_id"]: f"{s['name'] or s['station_id']} (ID: {s['station_id']})" for s in self._discovered_stations}
-        schema_dict: dict = {
-            vol.Required(CONF_STATION_ID): vol.In(station_options),
-            vol.Optional(CONF_EQU_SN, default=""): str,
+        station_options = {
+            s["station_id"]: f"{s['name'] or s['station_id']} (ID: {s['station_id']})"
+            for s in self._discovered_stations
         }
+        schema_dict: dict = {vol.Required(CONF_STATION_ID): vol.In(station_options)}
         if not self._discovered_user_id:
             schema_dict[vol.Required(CONF_USER_ID)] = str
         schema = vol.Schema(schema_dict)
@@ -185,16 +264,16 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            data = {**self._credentials, **user_input}
+            station_id = str(user_input[CONF_STATION_ID])
+            user_id = str(user_input[CONF_USER_ID])
             session = async_get_clientsession(self.hass)
             client = RenacApiClient(
                 session=session,
-                base_url=data[CONF_BASE_URL],
-                username=data[CONF_USERNAME],
-                password=data[CONF_PASSWORD],
-                station_id=str(data[CONF_STATION_ID]),
-                user_id=str(data[CONF_USER_ID]),
-                equ_sn=data.get(CONF_EQU_SN) or None,
+                base_url=self._credentials[CONF_BASE_URL],
+                username=self._credentials[CONF_USERNAME],
+                password=self._credentials[CONF_PASSWORD],
+                station_id=station_id,
+                user_id=user_id,
             )
             try:
                 await client.async_login()
@@ -203,13 +282,19 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(f"{data[CONF_USER_ID]}_{data[CONF_STATION_ID]}")
+                equ_sn = await _discover_equ_sn(client, station_id, user_id)
+                data = {
+                    **self._credentials,
+                    CONF_STATION_ID: station_id,
+                    CONF_USER_ID: user_id,
+                    CONF_EQU_SN: equ_sn,
+                }
+                await self.async_set_unique_id(f"{user_id}_{station_id}")
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=f"RENAC {data[CONF_STATION_ID]}", data=data)
+                return self.async_create_entry(title=f"RENAC {station_id}", data=data)
 
         schema = vol.Schema({
             vol.Required(CONF_USER_ID, default=self._discovered_user_id or ""): str,
             vol.Required(CONF_STATION_ID): str,
-            vol.Optional(CONF_EQU_SN, default=""): str,
         })
         return self.async_show_form(step_id="manual", data_schema=schema, errors=errors)
