@@ -144,12 +144,15 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 login_data = await temp_client._raw_login()
-            except RenacApiError:
+            except RenacApiError as err:
+                _LOGGER.warning("RENAC login failed: %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception:
+            except Exception as err:
+                _LOGGER.exception("Unexpected error during RENAC login: %s", err)
                 errors["base"] = "unknown"
             else:
                 self._discovered_user_id = _extract_user_id(login_data)
+                _LOGGER.debug("Login OK — user_id=%s login_data keys=%s", self._discovered_user_id, list(login_data.keys()))
                 self._credentials = {**user_input, CONF_BASE_URL: DEFAULT_BASE_URL}
 
                 # Discover stations — confirmed working payload includes offset+rows
@@ -165,8 +168,9 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         if stations:
                             _LOGGER.debug("Stations found via %s: %s", endpoint, stations)
                             break
-                    except RenacApiError:
-                        pass
+                        _LOGGER.debug("No stations in response from %s: %s", endpoint, resp)
+                    except RenacApiError as err:
+                        _LOGGER.debug("Station endpoint %s failed: %s", endpoint, err)
 
                 self._discovered_stations = stations
 
@@ -231,9 +235,11 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
-            except RenacApiError:
+            except RenacApiError as err:
+                _LOGGER.warning("RENAC login failed (station step): %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception:
+            except Exception as err:
+                _LOGGER.exception("Unexpected error during RENAC login (station step): %s", err)
                 errors["base"] = "unknown"
             else:
                 equ_sn = await _discover_equ_sn(client, station_id, user_id)
@@ -277,9 +283,11 @@ class RenacPowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
-            except RenacApiError:
+            except RenacApiError as err:
+                _LOGGER.warning("RENAC login failed (manual step): %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception:
+            except Exception as err:
+                _LOGGER.exception("Unexpected error during RENAC login (manual step): %s", err)
                 errors["base"] = "unknown"
             else:
                 equ_sn = await _discover_equ_sn(client, station_id, user_id)

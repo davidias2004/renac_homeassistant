@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import logging
 from typing import Any
 
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class RenacApiError(Exception):
@@ -46,7 +49,8 @@ class RenacApiClient:
         )
         token = self._deep_find(data, ["user.token", "token", "access_token", "data.token", "data.access_token"])
         if not token:
-            raise RenacApiError(f"Login efetuado, mas token não encontrado na resposta: {data}")
+            _LOGGER.warning("RENAC login response (no token found): %s", data)
+            raise RenacApiError(f"Login OK mas token não encontrado. Resposta: {data}")
         self.token = str(token)
         return data if isinstance(data, dict) else {}
 
